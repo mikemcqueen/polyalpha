@@ -1,172 +1,187 @@
 import argparse
-from itertools import permutations, tee
-import base64
+from wordgen import generate_words
+from ciphergen import generate_ciphers
+from codec import decode_with_key, find_key
+from util import aggregate_len, safe_len
 
-class TextDecoder:
-    def __init__(self, fragments, wordlist_path, min_word_length=1):
-        self.fragments = fragments
-        self.target_length = sum(len(f) for f in fragments)
-        self.min_word_length = min_word_length
-        self.wordlist = self._load_wordlist(wordlist_path)
-        
-    def _load_wordlist(self, path):
-        with open(path, 'r') as f:
-            return set(
-                word.strip().lower() 
-                for word in f 
-                if len(word.strip()) >= self.min_word_length
-            )
-
-    def create_key_generator(self, target_length):
-        """
-        Factory function that returns a new generator for word combinations
-        
-        Args:
-            target_length (int): Desired total length of combined words
-            
-        Returns:
-            generator: Yields word combinations that sum to target length
-        """
-        def generate_combinations(current_words=None, current_length=0):
-            if current_words is None:
-                current_words = []
-                
-            if current_length == target_length:
-                yield current_words
-                return
-                
-            if current_length > target_length:
-                return
-                
-            remaining_length = target_length - current_length
-            if remaining_length < self.min_word_length:
-                return
-                
-            for word in self.wordlist:
-                if len(word) <= remaining_length:
-                    yield from generate_combinations(
-                        current_words + [word],
-                        current_length + len(word)
-                    )
-                    
-        return generate_combinations()
-
-    def process_fragment_permutation(self, fragment_perm, key_gen):
-        """
-        Process a fragment permutation with all keys from a generator
-        
-        Args:
-            fragment_perm: Current fragment permutation
-            key_gen: Generator for possible keys
-            
-        Yields:
-            tuple: (fragment_perm, key_words, decoded_text, valid_words)
-        """
-        encoded_text = ''.join(fragment_perm)
-        
-        # Iterate through all keys from the generator
-        num_keys = 0
-        for key_words in key_gen:
-            key = ''.join(key_words)
-            num_keys += 1
-            if num_keys % 100 == 0:
-                print(f"\r keys: {num_keys}", end="", flush=True)
-            # Try decoding with current key
-            decoded = self.decode_with_key(encoded_text, key)
-            if decoded:
-                valid_words = self.verify_decoded_text(decoded)
-                if valid_words:
-                    yield (fragment_perm, key_words, decoded, valid_words)
-
-    def beaufort_decrypt(self, ciphertext, key):
-        plaintext = ""
-        key_length = len(key)
-        key_as_int = [ord(i) - ord('a') for i in key]
-        ciphertext_int = [ord(i) - ord('a') for i in ciphertext]
-        
-        for i in range(len(ciphertext_int)):
-            # Key difference: Beaufort uses (key - ciphertext) mod 26
-            # instead of Vigenère's (ciphertext - key) mod 26
-            plain = (key_as_int[i % key_length] - ciphertext_int[i]) % 26
-            plaintext += chr(plain + ord('a'))
+def load_wordlist(path, min_word_length):
+    wordlist = []
+    with open(path, 'r') as f:
+        for word in f:
+            stripped = word.strip()
+            if stripped.isalpha() and len(stripped) >= min_word_length:
+                wordlist.append(stripped.lower())
+    wordlist.sort()
+    return wordlist
     
-        return plaintext
 
-    def decode_with_key(self, encoded_text, key):
-        return self.beaufort_decrypt(encoded_text, key)
+# NOTE: this doesn't handle case where --uc ends in 'n'; it will
+#       not differentiate between 'nc' and 'ngqzp'. we'd need a
+#       'list of first_frags' to support that.
+def get_remaining_fragments(cipher, frags):
+    def get_frag(cipher, frags):
+        for frag in frags:
+            if cipher.startswith(frag):
+                return frag
+        return ""
 
-    def verify_decoded_text(self, text):
-        """Find valid word combinations that match decoded text exactly"""
-        if len(text) != self.target_length:
-            return []
-            
-        def find_exact_matches(remaining_text, current_words=None):
-            if current_words is None:
-                current_words = []
-                
-            if not remaining_text:
-                return [current_words]
-                
-            if len(remaining_text) < self.min_word_length:
-                return []
-                
-            results = []
-            for word in self.wordlist:
-                if remaining_text.startswith(word):
-                    new_results = find_exact_matches(
-                        remaining_text[len(word):],
-                        current_words + [word]
-                    )
-                    results.extend(new_results)
-                    
-            return results
-            
-        return find_exact_matches(text.lower())
+    pfx = "";
+    for frag in iter(lambda: get_frag(cipher, frags), ""):
+        cipher = cipher[len(frag):]
+        frags.remove(frag)
 
-    def process_all(self):
-        for frag_perm in permutations(self.fragments):
-            print(f"frags: {''.join(frag_perm)}")
-            key_gen = self.create_key_generator(self.target_length)
-            yield from self.process_fragment_permutation(frag_perm, key_gen)
+    if cipher:
+        if cipher == 'n':
+            print("cipher ends in 'n'")
+            exit()
+        for frag in frags:
+            if frag.startswith(cipher):
+                pfx = frag[len(cipher):]
+                frags.remove(frag)
+                break
+        if not pfx:
+            print(f"bad cipher: {cipher}")
+            exit()
 
-# Example usage:
-"""
-fragments = ['SGV', 'sbG8', 'gd29y', 'bGQ=']
-decoder = TextDecoder(fragments, 'path/to/wordlist.txt', min_word_length=3)
+    return (pfx, frags)
 
-for frag_perm, key_words, decoded, valid_words in decoder.process_all():
-    print(f"\nFragment permutation: {' '.join(frag_perm)}")
-    print(f"Key words: {' '.join(key_words)}")
-    print(f"Decoded text: {decoded}")
-    print("Valid word combinations:")
-    for words in valid_words:
-        print(f"  {' '.join(words)}")
-"""
 def parse_args():
     parser = argparse.ArgumentParser()
     #parser.add_argument("-k", "--key", nargs="?", const=None)
-    #parser.add_argument("-e", "--key-prefix", nargs="?", type=str, const=None)
     #parser.add_argument('-y', '--key-offset', type=int, default=0)
     #parser.add_argument("-p", "--plain", nargs="?", const=None)
-    #parser.add_argument("-a", "--plain-prefix", nargs="?", type=str, const=None)
-    #parser.add_argument('-i', '--plain-offset', type=int, default=3)
-    #parser.add_argument("-c", "--cipher", default="XZFDQNGQZP")
-    parser.add_argument("-m", "--min_word_length", type=int, default=3)
+    parser.add_argument("--pp", metavar="PLAIN_PREFIX", type=str, required=True)
+    parser.add_argument("--kp", metavar="KEY_PREFIX", type=str, required=True)
+    parser.add_argument("--uc", metavar="USED_CIPHER", type=str, required=True)
+    parser.add_argument("-m", "--min-word-length", type=int, default=3)
     parser.add_argument("-d", "--dict", default="/usr/share/dict/words")
-    #parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
     return parser.parse_args()
         
-# Example usage:
+class WordFinder:
+    def __init__(self, cipher_pfx, fragments, wordlist, args):
+        self.cipher_pfx = cipher_pfx
+        self.fragments = fragments
+        self.wordlist = wordlist
+        self.word_set = set(wordlist)
+        self.plain_pfx = args.pp
+        self.key_pfx = args.kp
+        self.min_word_length = args.min_word_length
+        self.max_word_length = 10
+
+    def find_first(self, pfx):
+        for i, s in enumerate(self.wordlist):
+            if s.startswith(pfx):
+                return i
+        return None
+
+    def contains_words_and_word_prefix(self, letters, words):
+        if len(letters) < 2: 
+            return (True, words, letters)
+        pfx = letters[:2]
+        idx = self.find_first(pfx)
+        if idx is not None:
+            while idx < len(self.wordlist) and self.wordlist[idx].startswith(pfx):
+                word = self.wordlist[idx]
+                if word.startswith(letters):
+                    if len(word) == len(letters):
+                        words.append(word)
+                        return (True, words, None)
+                    else:
+                        return (True, words, letters)
+                if letters.startswith(word):
+                    words.append(word)
+                    return self.contains_words_and_word_prefix(letters[len(word):], words)
+                idx += 1
+        return (False, [], None)
+
+    def find_all_words(self):
+        print(f"{type(self.wordlist)}: {len(self.wordlist)}")
+        return self.find_words(self.plain_pfx, self.key_pfx, self.cipher_pfx, fragments, 0, ("", "", "", []))
+
+    def print_state(self, level, plain, cipher, key, key_words, key_remain, pkcw):
+        p, k, c, w = pkcw
+        print(f"{level} p: ", end="")
+        #print(f"{p}," if p else "", end="")
+        print(f"{plain}, c: ", end="")
+        #print(f"{c}," if c else "", end="")
+        print(f"{cipher}, k: ", end="")
+        #print(f"{k}," if k else "", end="")
+        print(f"{key}, words: ", end="")
+        #print(f"{w}," if w else "", end="")
+        print(f"{key_words}", end="")
+        print(f", remain: {key_remain}" if key_remain else "")
+
+
+    def find_words(self, plain_pfx, key_pfx, cipher_pfx, fragments, level, pkcw):
+        #if level > 0:
+        #    print(f" {level} pp: {plain_pfx} kp: {key_pfx} cp: {cipher_pfx} frags: {safe_len(fragments)}")
+        if not fragments: return
+        for frag in fragments:
+            cipher = cipher_pfx + frag
+            plain_idx = self.find_first(plain_pfx)
+            if plain_idx is None:
+                continue
+            while plain_idx < len(self.wordlist) and self.wordlist[plain_idx].startswith(plain_pfx):
+                plain = self.wordlist[plain_idx]
+                plain_idx += 1
+                key = find_key(plain, cipher)
+                #print(f"plain: {plain}, key: {key}")
+                for key_words, key_remain in generate_words(key_pfx + key, self.word_set, self.wordlist):
+                    key_len = aggregate_len(key_words) + safe_len(key_remain)
+                    p, k, c, w = pkcw
+                    #if pfx is None or safe_len(words) > 2:
+                        #print(f"{level} p: {plain}, c: {cipher}, k: {key}, words: {words}", end="")
+                    #self.print_state(level, plain, cipher, key_pfx + key, key_words, key_remain, pkcw)
+
+                    if key_len < len(plain) and key_remain is not None:
+                        key_words_len = aggregate_len(key_words) - safe_len(plain_pfx)
+                        new_plain = plain[key_words_len:]
+                        new_cipher_pfx = "" if key_remain is None else cipher[-len(key_remain):]
+                        remain_frags = fragments.copy()
+                        remain_frags.remove(frag)
+                        state_printed = False
+                        for new_cipher, new_cipher_sfx, new_plain_pfx, used_frags in \
+                                generate_ciphers(new_plain, key_remain, new_cipher_pfx, self.wordlist, remain_frags):
+                            if not state_printed:
+                                self.print_state(level, plain, cipher, key_pfx + key, key_words, key_remain, pkcw)
+                                state_printed = True
+
+                            print(f"  pp: {new_plain}, kp: {key_remain}, cp: {new_cipher_pfx}" \
+                                  f", nc: {new_cipher}, ncs: {new_cipher_sfx}, npp: {new_plain_pfx}" \
+                                  f", frags: {used_frags}, k({new_cipher},{new_plain}): {find_key(new_cipher, new_plain)}")
+                            if new_cipher_sfx:
+                                assert new_plain_pfx
+                                new_frags = remain_frags.copy()
+                                for uf in used_frags:
+                                    new_frags.remove(uf)
+                                p += plain
+                                k += key
+                                c += cipher
+                                if key_words is not None:
+                                    w += key_words
+                                self.find_words(new_plain_pfx, "", new_cipher_sfx, new_frags, level + 1, (p, k, c, w))
+
+"""
+                valid, words, remain = self.contains_words_and_word_prefix(key, [])
+                if not valid:
+                    continue
+                if len(plain) >= self.min_word_length:
+                    print(f"{level} p: {plain}, c: {cipher}, k: {key}, words: {','.join(words)}, remain: {remain}")
+                else:
+                    self.find_words(plain_pfx, key_pfx, cipher, fragments.copy().remove(frag), level + 1)
+"""
+
+
 args = parse_args()
-fragments = ['QVU', 'BMA', 'APS', 'E']
-#word_list_filename = '/usr/local/share/dict'
-decoder = TextDecoder(fragments, args.dict, min_word_length=3)
-
-for frag_perm, key_words, decoded, valid_words in decoder.process_all():
-    print(f"\nFragment permutation: {' '.join(frag_perm)}")
-    print(f"Key words: {' '.join(key_words)}")
-    print(f"Decoded text: {decoded}")
-    print("Valid word combinations:")
-    for words in valid_words:
-        print(f"  {' '.join(words)}")
-
+fragments = ['ngqzp','e', 'qvu', 'bma', 'aps', 'tn', 'nc', 'sc', 'xzfdq']
+cipher_pfx, fragments = get_remaining_fragments(args.uc, fragments)
+print(f"cp: '{cipher_pfx}', remaining_frags: {','.join(fragments)}")
+if cipher_pfx:
+    if not args.pp:
+        print(f"Cipher prefix '{cipher_pfx}' requires PLAIN_PREFIX")
+        exit()
+    # TODO: confirm decoded cipher prefix matches plain prefix
+wordlist = load_wordlist(args.dict, args.min_word_length)
+finder = WordFinder(cipher_pfx, fragments, wordlist, args)
+finder.find_all_words()

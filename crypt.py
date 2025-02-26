@@ -47,16 +47,19 @@ def main():
     args = parse_args()
     if (args.key, args.plain) == (None, None):
         print("Either --key or --plain is required (but not both)")
+        exit()
     if None not in (args.key, args.plain):
         print("Specifying both --key and --plain is not allowed")
+        exit()
 
-    if args.key is not None:
-        decrypted = decrypt(args.cipher, args.key)
-    else:
-        decrypted = find_key(args.cipher, args.plain)
+    for cipher in args.cipher.split(','):
+        if args.key is not None:
+            decrypted = decrypt(cipher, args.key)
+        else:
+            decrypted = find_key(cipher, args.plain)
+        print(f"(b): {decrypted.beaufort}")
 
-    print(f"(v): {decrypted.vigenere}")
-    print(f"(b): {decrypted.beaufort}")
+    #print(f"(v): {decrypted.vigenere}")
 
 if __name__ == "__main__":
     main()
