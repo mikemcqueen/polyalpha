@@ -1,3 +1,6 @@
+from collections import namedtuple
+Words = namedtuple('Words', ['set', 'list'])
+
 def generate_words_with_prefix(word_list, prefix):
     """
     Generator that yields all words from a sorted word list that start with the given prefix.
@@ -29,18 +32,19 @@ def generate_words_with_prefix(word_list, prefix):
     for i in range(start_idx, len(word_list)):
         if word_list[i].startswith(prefix):
             yield word_list[i]
-        elif word_list[i] > prefix and not word_list[i].startswith(prefix):
+        else: # if word_list[i] > prefix and not word_list[i].startswith(prefix):
             # We've passed all potential matches since the list is sorted
             break
 
 
-def generate_words(input_string, word_set, sorted_wordlist):
+def generate_words(input_string, words):
     """
     Generator function that yields all possible unique valid partitions of the input string,
     where each partition uses ALL letters and satisfies these constraints:
     a) a word in the wordlist
     b) a sequence of one or more words in the wordlist
-    c) a sequence of zero or more words in the wordlist, followed by characters that are a prefix to a word in the wordlist
+    c) a sequence of zero or more words in the wordlist, followed by characters that are
+       a prefix to a word in the wordlist
     
     Args:
         input_string (str): The input string containing a sequence of letters
@@ -53,43 +57,19 @@ def generate_words(input_string, word_set, sorted_wordlist):
     """
     # Use binary search approach to check if a string is a prefix
     def is_prefix_of_word(prefix):
-        # If prefix is a complete word, only consider it a prefix if it's a prefix of another word
-        if prefix in word_set:
-            # Binary search for the first word that might start with this prefix
-            left, right = 0, len(sorted_wordlist) - 1
-            while left <= right:
-                mid = (left + right) // 2
-                if sorted_wordlist[mid] < prefix:
-                    left = mid + 1
-                else:
-                    right = mid - 1
-            
-            # Check the words from this position
-            for i in range(left, len(sorted_wordlist)):
-                word = sorted_wordlist[i]
-                # If we've moved past potential matches, stop looking
-                if not word.startswith(prefix[0]):
-                    break
-                if word != prefix and word.startswith(prefix):
-                    return True
-            return False
-        
-        # For non-words, binary search to find potential matches
-        left, right = 0, len(sorted_wordlist) - 1
+        left, right = 0, len(words.list) - 1
         while left <= right:
             mid = (left + right) // 2
-            if sorted_wordlist[mid] < prefix:
+            if words.list[mid] < prefix:
                 left = mid + 1
             else:
                 right = mid - 1
         
-        # Check the words from this position
-        for i in range(left, len(sorted_wordlist)):
-            word = sorted_wordlist[i]
-            # If we've moved past potential matches, stop looking
-            if not word.startswith(prefix[0]):
+        for i in range(left, len(words.list)):
+            word = words.list[i]
+            if not word.startswith(prefix):
                 break
-            if word.startswith(prefix):
+            if word != prefix:
                 return True
         return False
     
@@ -112,7 +92,7 @@ def generate_words(input_string, word_set, sorted_wordlist):
             current_substring = input_string[start_idx:end_idx]
             
             # Check if the current substring is a valid word
-            if current_substring in word_set:
+            if current_substring in words.set:
                 # Add this word to our current parts and continue
                 current_words.append(current_substring)
                 # Recurse to find more words
@@ -131,7 +111,7 @@ def generate_words(input_string, word_set, sorted_wordlist):
                 yield words_to_yield, remaining
     
     # Single word case (constraint a)
-    if input_string in word_set:
+    if input_string in words.set:
         partition = (tuple([input_string]), None)
         if partition not in yielded_partitions:
             yielded_partitions.add(partition)
@@ -140,22 +120,26 @@ def generate_words(input_string, word_set, sorted_wordlist):
     # Start backtracking from the beginning of the string with no current words
     yield from backtrack(0, [])
 
-def test_generate_words():
-    sample_wordlist = ["cat", "apple", "cats", "do", "dog", "dogmeat", "go", "good"]
-    sample_wordlist.sort()
-    sample_input = "applecatdog"
-    
-    print(f"Valid partitions for input '{sample_input}':")
-    for words, prefix in generate_words(sample_input, set(sample_wordlist), sample_wordlist):
-        print(f"words: {words}, prefix: {prefix}")
+
+def contains_words_and_word_prefix(text, words):
+    #return any(True for _ in generate_words(text, words))
+    for _ in generate_words(text, words):
+        return True
+    return False
 
 
-def test_generate_words_with_prefix():
-    sample_wordlist = ["cat", "apple", "cats", "do", "dog", "dogmeat", "go", "good"]
-    sample_wordlist.sort()
+"""
+--do--
+word: do
+word: dog
+word: dogmeat
+--bonfi--
+word: bonfire
+"""
+def test_generate_words_with_prefix(wordlist):
     prefix = "do"
     print(f"--{prefix}--")
-    for word in generate_words_with_prefix(sample_wordlist, prefix):
+    for word in generate_words_with_prefix(wordlist, prefix):
         print(f"word: {word}")
 
     prefix = "bonfi"
@@ -167,7 +151,24 @@ def test_generate_words_with_prefix():
         print(f"word: {word}")
 
 
+"""
+Valid partitions for input 'applecatdog':
+words: ['apple', 'cat', 'do'], prefix: g
+words: ['apple', 'cat', 'dog'], prefix: None
+words: ['apple', 'cat'], prefix: dog
+"""
+def test_generate_words(words):
+    sample_input = "applecatdog"
+    
+    print(f"Valid partitions for input '{sample_input}':")
+    for words, prefix in generate_words(sample_input, words):
+        print(f"words: {words}, prefix: {prefix}")
+
+
 # Example usage:
 if __name__ == "__main__":
-    test_generate_words()
-    test_generate_words_with_prefix()
+    wordlist = ["cat", "apple", "cats", "do", "dog", "dogmeat", "go", "good"]
+    wordlist.sort()
+    test_generate_words_with_prefix(wordlist)
+    words = Words(set=set(wordlist), list=wordlist)
+    test_generate_words(words)

@@ -2,18 +2,7 @@ import argparse
 from wordgen import generate_words
 from ciphergen import generate_ciphers
 from codec import decode_with_key, find_key
-from util import aggregate_len, safe_len
-
-def load_wordlist(path, min_word_length):
-    wordlist = []
-    with open(path, 'r') as f:
-        for word in f:
-            stripped = word.strip()
-            if stripped.isalpha() and len(stripped) >= min_word_length:
-                wordlist.append(stripped.lower())
-    wordlist.sort()
-    return wordlist
-    
+from util import aggregate_len, safe_len, load_wordlist
 
 # NOTE: this doesn't handle case where --uc ends in 'n'; it will
 #       not differentiate between 'nc' and 'ngqzp'. we'd need a
