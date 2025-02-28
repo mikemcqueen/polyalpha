@@ -1,5 +1,48 @@
 from collections import namedtuple
+from codec import decode_with_key
+from util import join
+
 Words = namedtuple('Words', ['set', 'list'])
+
+def get_prefix_start_idx(prefix, wordlist):
+    # Find first potential match using binary search
+    left, right = 0, len(wordlist) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if wordlist[mid] < prefix:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return left
+
+
+def generate_key_words(ctx, md):
+    def backtrack(key_words, start_idx):
+        if key_words:
+            key = join(key_words)
+            plain = decode_with_key(ctx.cipher[:len(key)], key)
+            if (md.verbose): print(f" p: {plain} kw: {key_words}")
+        
+            if not contains_words_and_word_prefix(plain, md.words):
+                return
+            
+            yield key_words.copy()
+
+            if len(key) >= len(ctx.cipher):
+                return
+        
+        # Try adding one more word to the key
+        for i in range(start_idx, len(md.words.list)):
+            key_words.append(md.words.list[i])
+            yield from backtrack(key_words, i)  # Allow repetition of words
+            key_words.pop()
+    
+    # Start backtracking with empty key
+    start_idx = 0
+    if ctx.key_pfx:
+        start_idx = get_prefix_start_idx(ctx.key_pfx, md.words.list)
+    yield from backtrack(ctx.key_words or [], start_idx)
+
 
 def generate_words_with_prefix(word_list, prefix):
     """

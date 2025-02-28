@@ -1,6 +1,6 @@
 from codec import decode_with_key, find_key
 from wordgen import Words, generate_words_with_prefix, contains_words_and_word_prefix
-from util import aggregate_len, safe_len, load_wordlist
+from util import aggregate_len, safe_len, load_wordlist, parse_args
 
 def generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose=False):
     """
@@ -131,35 +131,38 @@ def test_generate_ciphers2(fragments, wordlist):
         print(f"c: {c}, c: {cs}, p {pp}, frags: {f}, key: {key}")
 
 
-def test_generate_ciphers_for_key(fragments, words):
+def test_generate_ciphers_for_key(fragments, words, verbose):
     plain = "epic"
     key_words = ["bon"]
     cipher = "xzfdq"
     key_words_len = aggregate_len(key_words)
     plain_pfx = plain[key_words_len:]
     cipher_pfx = cipher[key_words_len:]
+
     key = "fire"
     print(f"--\nk: {key}, cp: {cipher_pfx}")
-    for c, cs, p, f in generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, True):
+    for c, cs, p, f in generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose):
         print(f"c: {c}, cs: {cs}, p: {p}, frags: {f}")
 
     key = "fiber"
     print(f"--\nk: {key}, cp: {cipher_pfx}")
-    for c, cs, p, f in generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, True):
+    for c, cs, p, f in generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose):
         print(f"c: {c}, cs: {cs}, p: {p}, frags: {f}")
 
 
 def main():
+    args = parse_args()
+
     fragments = ['qvu', 'bma', 'aps', 'e', 'tn', 'nc', 'sc', 'ngqzp']
     wordlist = [ "balls", "boobs", "bonfire", "bucket", "fire", "fiber", "fandango" ]
     wordlist.sort()
 
-    test_generate_ciphers(fragments, wordlist)
-    test_generate_ciphers2(fragments, wordlist)
+    test_generate_ciphers(fragments, wordlist) #, args.verbose)
+    test_generate_ciphers2(fragments, wordlist) #, args.verbose)
 
-    wordlist = load_wordlist("/usr/share/dict/words", 3)
+    wordlist = load_wordlist(args.dict, args.min_word_length)
     words = Words(set=set(wordlist), list=wordlist)
-    test_generate_ciphers_for_key(fragments, words)
+    test_generate_ciphers_for_key(fragments, words, args.verbose)
 
 
 if __name__ == "__main__":
