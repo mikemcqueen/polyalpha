@@ -1,8 +1,8 @@
 from codec import decode_with_key, find_key
 from wordgen import Words, generate_words_with_prefix, contains_words_and_word_prefix
-from util import aggregate_len, safe_len, load_wordlist, parse_args
+from util import aggregate_len, safe_len, load_wordlist, parse_args, join
 
-def generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose=False):
+def old_generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose=False):
     """
     Generate all valid combinations of ciphertext that when decoded with the supplied key,
     results in zero or more plaintext words, optionally followed by a valid word prefix.
@@ -46,6 +46,31 @@ def generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbo
         print(f"gen_ciphers_for_key(k: {key}, pp: {plain_pfx}, cp: {cipher_pfx}, f: {fragments})")
     # Start backtracking with the partial ciphertext
     yield from backtrack(cipher_pfx, fragments, [], [])
+
+def generate_ciphers_for_key(ctx, md):
+    def backtrack(fragments, used_fragments):
+        if fragments:
+            #cipher = ctx.cipher + join(fragments)
+            cipher = ctx.cipher + join(ctx.fragments[i] for i in fragments)
+            plain = decode_with_key(cipher[:len(ctx.key)], ctx.key)
+            if not contains_words_and_word_prefix(plain, md.words):
+                return
+            
+            if len(cipher) >= len(ctx.key):
+                if (md.verbose): print(f"{' ' * ctx.level} gen_cfk:{ctx.level} p: {plain}, k: {ctx.key}, c: {cipher}")
+                yield cipher, [frag for idx, frag in enumerate(ctx.fragments) if idx not in used_fragments]
+                return
+        
+        for i in range(0, len(ctx.fragments)):
+            if i in used_fragments:
+                continue
+            used_fragments.add(i)
+            fragments.append(i) #ctx.fragments[i])
+            yield from backtrack(fragments, used_fragments)
+            fragments.pop()
+            used_fragments.remove(i)
+    
+    yield from backtrack([], set())
 
 
 def generate_ciphers(plaintext, key_pfx, cipher_pfx, wordlist, fragments):
@@ -141,12 +166,12 @@ def test_generate_ciphers_for_key(fragments, words, verbose):
 
     key = "fire"
     print(f"--\nk: {key}, cp: {cipher_pfx}")
-    for c, cs, p, f in generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose):
+    for c, cs, p, f in old_generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose):
         print(f"c: {c}, cs: {cs}, p: {p}, frags: {f}")
 
     key = "fiber"
     print(f"--\nk: {key}, cp: {cipher_pfx}")
-    for c, cs, p, f in generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose):
+    for c, cs, p, f in old_generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose):
         print(f"c: {c}, cs: {cs}, p: {p}, frags: {f}")
 
 

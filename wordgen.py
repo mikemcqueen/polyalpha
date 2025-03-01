@@ -21,20 +21,22 @@ def generate_key_words(ctx, md):
         if key_words:
             key = join(key_words)
             plain = decode_with_key(ctx.cipher[:len(key)], key)
-            if (md.verbose): print(f" p: {plain} kw: {key_words}")
         
             if not contains_words_and_word_prefix(plain, md.words):
                 return
             
-            yield key_words.copy()
-
             if len(key) >= len(ctx.cipher):
+                if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
+                yield key_words.copy()
                 return
         
         # Try adding one more word to the key
         for i in range(start_idx, len(md.words.list)):
-            key_words.append(md.words.list[i])
-            yield from backtrack(key_words, i)  # Allow repetition of words
+            word = md.words.list[i]
+            if ctx.key_pfx and not word.startswith(ctx.key_pfx):
+                return
+            key_words.append(word)
+            yield from backtrack(key_words, start_idx)  # Allow repetition of words
             key_words.pop()
     
     # Start backtracking with empty key
@@ -55,10 +57,6 @@ def generate_words_with_prefix(word_list, prefix):
     Yields:
         Words from word_list that start with prefix
     """
-    # Since the list is sorted, we can use binary search to find the first match
-    # Then iterate from there until we find words that don't match the prefix
-    
-    # Find first potential match using binary search
     left, right = 0, len(word_list) - 1
     
     while left <= right:
@@ -68,15 +66,12 @@ def generate_words_with_prefix(word_list, prefix):
         else:
             right = mid - 1
     
-    # Start iterating from the first potential match
     start_idx = left
     
-    # Yield all matching words
     for i in range(start_idx, len(word_list)):
         if word_list[i].startswith(prefix):
             yield word_list[i]
-        else: # if word_list[i] > prefix and not word_list[i].startswith(prefix):
-            # We've passed all potential matches since the list is sorted
+        else:
             break
 
 
