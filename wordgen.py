@@ -4,6 +4,9 @@ from util import join
 
 Words = namedtuple('Words', ['set', 'list'])
 
+all_plain_words = set()
+all_key_words = set()
+
 def get_prefix_start_idx(prefix, wordlist):
     # Find first potential match using binary search
     left, right = 0, len(wordlist) - 1
@@ -15,7 +18,6 @@ def get_prefix_start_idx(prefix, wordlist):
             right = mid - 1
     return left
 
-
 def generate_key_words(ctx, md):
     def backtrack(key_words, start_idx):
         if key_words:
@@ -26,7 +28,7 @@ def generate_key_words(ctx, md):
                 return
             
             if len(key) >= len(ctx.cipher):
-                if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
+                #if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
                 yield key_words.copy()
                 return
         
@@ -72,6 +74,7 @@ def generate_words_with_prefix(word_list, prefix):
         word = word_list[i]
         if word.startswith(prefix):
             if (len(word) > len(prefix)):
+                all_plain_words.add(word)
                 yield word
         else:
             break
@@ -124,6 +127,7 @@ def generate_words(input_string, words):
             partition = (tuple(current_words), None)
             if partition not in yielded_partitions:
                 yielded_partitions.add(partition)
+                all_plain_words.add(word for word in words_to_yield)
                 yield words_to_yield, None
             return
         
@@ -167,6 +171,12 @@ def contains_words_and_word_prefix(text, words):
         return True
     return False
 
+
+def show_all_words():
+    print("key\n-----")
+    print(word for word in all_key_words)
+    print("\nplain\n-----")
+    print(word for word in all_plain_words)
 
 """
 --do--

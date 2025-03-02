@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("-d", "--dict", default="/usr/share/dict/words")
     parser.add_argument("-m", "--min-word-length", type=int, default=3)
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-w', '--show-words', action='store_true')
     return parser.parse_args()
 
 
