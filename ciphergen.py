@@ -72,6 +72,33 @@ def generate_ciphers_for_key(ctx, md):
     
     yield from backtrack([], set())
 
+def generate_ciphers_for_plaintext(ctx, md):
+    min_cipher_length = aggregate_len(ctx.key_words) + 2
+    if len(ctx.cipher) >= min_cipher_length:
+        yield ctx.cipher, ctx.fragments
+
+    def backtrack(fragments, used_fragments):
+        if fragments:
+            frags = join(ctx.fragments[i] for i in fragments)
+            cipher = ctx.cipher + frags
+            #if len(cipher) >= len(ctx.plaintext):
+            #if len(frags) >= min_frag_length:
+            if len(cipher) >= min_cipher_length:
+                #if (md.verbose): print(f"{' ' * ctx.level} gen_ac:{ctx.level} p: {plain}, k: {ctx.key}, c: {cipher}")
+                yield cipher + frags, [frag for idx, frag in enumerate(ctx.fragments) if idx not in used_fragments]
+                return
+        
+        for i in range(0, len(ctx.fragments)):
+            if i in used_fragments:
+                continue
+            used_fragments.add(i)
+            fragments.append(i)
+            yield from backtrack(fragments, used_fragments)
+            fragments.pop()
+            used_fragments.remove(i)
+    
+    yield from backtrack([], set())
+
 
 def generate_ciphers(plaintext, key_pfx, cipher_pfx, wordlist, fragments):
     """

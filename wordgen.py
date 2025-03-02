@@ -69,8 +69,10 @@ def generate_words_with_prefix(word_list, prefix):
     start_idx = left
     
     for i in range(start_idx, len(word_list)):
-        if word_list[i].startswith(prefix):
-            yield word_list[i]
+        word = word_list[i]
+        if word.startswith(prefix):
+            if (len(word) > len(prefix)):
+                yield word
         else:
             break
 

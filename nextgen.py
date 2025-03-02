@@ -1,7 +1,7 @@
 import copy
 from codec import decode_with_key, find_key
 from wordgen import Words, generate_words, generate_words_with_prefix, generate_key_words
-from ciphergen import generate_ciphers, generate_ciphers_for_key
+from ciphergen import generate_ciphers_for_key, generate_ciphers_for_plaintext
 from util import aggregate_len, safe_len, load_wordlist, parse_args, join
 from collections import namedtuple
 from enum import Enum
@@ -16,7 +16,8 @@ class Op(Enum):
     CIPHERS_FOR_KEY = 1,
     KEY_WORDS = 2,
     PLAINTEXT_WORDS = 3,
-    PLAINTEXT_FOR_PREFIX = 4
+    PLAINTEXT_FOR_PREFIX = 4,
+    CIPHERS_FOR_PLAINTEXT = 5
 
 @dataclass
 class Pkc:
@@ -36,22 +37,30 @@ class Context(Pkc):
     pkc: Pkc = field(default_factory=Pkc)
     level: int = 0
 
+def next_key_for_cipher(cipher, fragments, ctx, md):
+    ctx = copy.copy(ctx)
+    ctx.cipher = cipher
+    ctx.fragments = fragments
+    yield from next_key_common(ctx, md)
+
 def next_key_for_plain_word(plain_word, ctx, md):
     ctx = copy.copy(ctx)
     ctx.plaintext = plain_word
     ctx.plain_words = [plain_word]
-    # should this always be true?
-    key_len = aggregate_len(ctx.key_words)
-    if len(ctx.plaintext) > key_len and len(ctx.cipher) > key_len:
-        # assuming probably often true, but not sure about always
-        if len(ctx.cipher) == key_len:
-            print(f"** c: {ctx.cipher} ({len(ctx.cipher)}) == kw: {ctx.key_words} ({key_len})")
-        assert len(ctx.cipher) > key_len
-        key = find_key(ctx.cipher, ctx.plaintext)
-        ctx.key_pfx = key[:key_len]
-        if md.verbose:
-            print(f"kp: {ctx.key_pfx}")
+    yield from next_key_common(ctx, md)
 
+def next_key_common(ctx, md):
+    key_len = aggregate_len(ctx.key_words)
+    assert len(ctx.cipher) >= key_len #len(ctx.plaintext)
+    assert len(ctx.plaintext) > key_len
+    #if len(ctx.plaintext) > key_len and len(ctx.cipher) > key_len:
+        # assuming probably often true, but not sure about always
+    #if len(ctx.cipher) == key_len:
+    #    print(f"** c: {ctx.cipher} ({len(ctx.cipher)}) == kw: {ctx.key_words} ({key_len})")
+    #assert len(ctx.cipher) >= key_len
+    key = find_key(ctx.cipher[:len(ctx.plaintext)], ctx.plaintext)
+    ctx.key_pfx = key[:key_len]
+    #if md.verbose: print(f"kp: {ctx.key_pfx}")
     yield from generate_next(Op.KEY_WORDS, ctx, md)
 
 def next_plaintext_for_prefix(plain_words, plain_pfx, ctx, md):
@@ -122,6 +131,16 @@ def next_ciphers_for_key(key_words, ctx, md):
     )
     yield from generate_next(Op.CIPHERS_FOR_KEY, ctx, md)
 
+def next_ciphers_for_plain_word(plain_word, ctx, md):
+    # TODO: not complete pkc here
+    if not ctx.fragments: yield ctx.pkc
+
+    assert plain_word
+    ctx = copy.copy(ctx)
+    ctx.plaintext = plain_word
+    ctx.plain_words = [plain_word]
+    yield from generate_next(Op.CIPHERS_FOR_PLAINTEXT, ctx, md)
+
 def final_context(plain_words, key_words, ctx, md):
     print_ctx(ctx)
     hdr = None
@@ -144,7 +163,7 @@ def generate_next(op, ctx, md):
     ctx.level += 1
     match(op):
         case Op.KEY_WORDS:
-            if md.verbose: print(f"{' ' * ctx.level} KEY_WORDS:{ctx.level} c: {ctx.cipher}, p: {ctx.plaintext}")
+            #if md.verbose: print(f"{' ' * ctx.level} KEY_WORDS:{ctx.level} c: {ctx.cipher}, p: {ctx.plaintext}")
             for key_words in generate_key_words(ctx, md):
                 key_len = aggregate_len(ctx.key_words) + aggregate_len(key_words)
                 if key_len > len(ctx.cipher):
@@ -171,7 +190,17 @@ def generate_next(op, ctx, md):
             if md.verbose: print(f"{' ' * ctx.level} PLAINTEXT_FOR_PREFIX:{ctx.level} pp: {ctx.plain_pfx}")
             for plain_word in generate_words_with_prefix(md.words.list, ctx.plain_pfx):
                 #if md.verbose: print(f"{' ' * ctx.level}gen_wwp pp: {ctx.plain_pfx}, w: {plain_word}, c: {ctx.cipher}")
-                yield from next_key_for_plain_word(plain_word, ctx, md)
+                if len(plain_word) < len(ctx.cipher):
+                    yield from next_key_for_plain_word(plain_word, ctx, md)
+                else:
+                    yield from next_ciphers_for_plain_word(plain_word, ctx, md)
+
+        case Op.CIPHERS_FOR_PLAINTEXT:
+            #if md.verbose: print(f"{' ' * ctx.level} CIPHERS_FOR_PLAINTEXT:{ctx.level} p: {ctx.plaintext}")
+            for cipher, fragments in generate_ciphers_for_plaintext(ctx, md):
+                yield from next_key_for_cipher(cipher, fragments, ctx, md)
+
+
     ctx.level -= 1
 
 
