@@ -19,46 +19,40 @@ def get_prefix_start_idx(prefix, wordlist):
     return left
 
 def generate_key_words(ctx, md):
+    existing_key = join(ctx.key_words)
+
     def backtrack(key_words, start_idx):
         if key_words:
-            key = join(key_words)
+            key = existing_key + join(key_words)
             plain = decode_with_key(ctx.cipher[:len(key)], key)
-        
+
             if not contains_words_and_word_prefix(plain, md.words):
                 return
-            
+
             if len(key) >= len(ctx.cipher):
-                #if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
-                yield key_words.copy()
+                if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
+                yield ctx.key_words + key_words
                 return
-        
+
         # Try adding one more word to the key
         for i in range(start_idx, len(md.words.list)):
             word = md.words.list[i]
-            if ctx.key_pfx and not word.startswith(ctx.key_pfx):
+            # Only filter first keyword on key_pfx
+            if not key_words and ctx.key_pfx and not word.startswith(ctx.key_pfx):
+                #print(f"filtered {word}")
                 return
             key_words.append(word)
             yield from backtrack(key_words, start_idx)  # Allow repetition of words
             key_words.pop()
-    
+
     # Start backtracking with empty key
     start_idx = 0
     if ctx.key_pfx:
         start_idx = get_prefix_start_idx(ctx.key_pfx, md.words.list)
-    yield from backtrack(ctx.key_words or [], start_idx)
+    yield from backtrack([], start_idx)
 
 
 def generate_words_with_prefix(word_list, prefix):
-    """
-    Generator that yields all words from a sorted word list that start with the given prefix.
-    
-    Args:
-        word_list: A sorted list of words
-        prefix: The prefix to match
-        
-    Yields:
-        Words from word_list that start with prefix
-    """
     left, right = 0, len(word_list) - 1
     
     while left <= right:
@@ -67,18 +61,26 @@ def generate_words_with_prefix(word_list, prefix):
             left = mid + 1
         else:
             right = mid - 1
-    
-    start_idx = left
-    
-    for i in range(start_idx, len(word_list)):
-        word = word_list[i]
-        if word.startswith(prefix):
-            if (len(word) > len(prefix)):
-                all_plain_words.add(word)
-                yield word
-        else:
-            break
 
+    N = 2
+    prev_n_letter_pfx = None
+    start_idx = left
+    end_idx = len(word_list)
+    for i in range(start_idx, end_idx):
+        word = word_list[i]
+        if len(word) <= len(prefix):
+            break
+        if not word.startswith(prefix):
+            break
+        valid_n_letter_pfx = True
+        n_letter_pfx = word[:N]
+        if n_letter_pfx != prev_n_letter_pfx:
+            prev_n_letter_pfx = n_letter_pfx
+            if (i + 1 < end_idx) and (word_list[i + 1][:N] == n_letter_pfx):
+                valid_n_letter_pfx = yield n_letter_pfx, True
+        if valid_n_letter_pfx:
+            yield word, False
+        
 
 def generate_words(input_string, words):
     """
@@ -127,7 +129,7 @@ def generate_words(input_string, words):
             partition = (tuple(current_words), None)
             if partition not in yielded_partitions:
                 yielded_partitions.add(partition)
-                all_plain_words.add(word for word in words_to_yield)
+                #all_plain_words.add(word for word in words_to_yield)
                 yield words_to_yield, None
             return
         
@@ -165,8 +167,18 @@ def generate_words(input_string, words):
     yield from backtrack(0, [])
 
 
+def is_empty_generator(gen):
+    for _ in gen:
+        return False
+    return True
+
+def keyword_generator(ctx, md):
+    return generate_key_words(ctx, md)
+
+def can_generate_keyword(ctx, md):
+    return not is_empty_generator(keyword_generator(ctx, md))
+
 def contains_words_and_word_prefix(text, words):
-    #return any(True for _ in generate_words(text, words))
     for _ in generate_words(text, words):
         return True
     return False

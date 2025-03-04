@@ -1,6 +1,7 @@
 from codec import decode_with_key, find_key
 from wordgen import Words, generate_words_with_prefix, contains_words_and_word_prefix
 from util import aggregate_len, safe_len, load_wordlist, parse_args, join
+from typing import Optional
 
 def old_generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, verbose=False):
     """
@@ -50,7 +51,6 @@ def old_generate_ciphers_for_key(key, plain_pfx, cipher_pfx, fragments, words, v
 def generate_ciphers_for_key(ctx, md):
     def backtrack(fragments, used_fragments):
         if fragments:
-            #cipher = ctx.cipher + join(fragments)
             cipher = ctx.cipher + join(ctx.fragments[i] for i in fragments)
             plain = decode_with_key(cipher[:len(ctx.key)], ctx.key)
             if not contains_words_and_word_prefix(plain, md.words):
@@ -65,27 +65,30 @@ def generate_ciphers_for_key(ctx, md):
             if i in used_fragments:
                 continue
             used_fragments.add(i)
-            fragments.append(i) #ctx.fragments[i])
+            fragments.append(i)
             yield from backtrack(fragments, used_fragments)
             fragments.pop()
             used_fragments.remove(i)
     
     yield from backtrack([], set())
 
-def generate_ciphers_for_plaintext(ctx, md):
-    min_cipher_length = aggregate_len(ctx.key_words) + 2
+def generate_ciphers_for_plaintext(ctx, md, min_cipher_length: Optional[int] = None):
+    #min_cipher_length = min_cipher_length or len(ctx.plaintext)
+    if min_cipher_length is None:
+        min_cipher_length = len(ctx.plaintext)
     if len(ctx.cipher) >= min_cipher_length:
-        yield ctx.cipher, ctx.fragments
+        yield ctx.cipher, ctx.fragments, False
 
     def backtrack(fragments, used_fragments):
         if fragments:
             frags = join(ctx.fragments[i] for i in fragments)
             cipher = ctx.cipher + frags
-            #if len(cipher) >= len(ctx.plaintext):
-            #if len(frags) >= min_frag_length:
+            # TODO should probably change this logic/param to "one_fragments: True"
+            # in which case... i don't think we need the gen.send(valid) feedback at all.
             if len(cipher) >= min_cipher_length:
-                #if (md.verbose): print(f"{' ' * ctx.level} gen_ac:{ctx.level} p: {plain}, k: {ctx.key}, c: {cipher}")
-                yield cipher + frags, [frag for idx, frag in enumerate(ctx.fragments) if idx not in used_fragments]
+                #if (md.verbose): print(f"{' ' * ctx.level} gen_cfp:{ctx.level} p: {plain}, c: {cipher}")
+                remaining_fragments = [frag for idx, frag in enumerate(ctx.fragments) if idx not in used_fragments]
+                valid = yield cipher, remaining_fragments, False
                 return
         
         for i in range(0, len(ctx.fragments)):
