@@ -19,7 +19,8 @@ def get_prefix_start_idx(prefix, wordlist):
     return left
 
 def generate_key_words(ctx, md):
-    existing_key = join(ctx.key_words)
+    ctx_key_words = ctx.key_words or []
+    existing_key = join(ctx_key_words)
 
     def backtrack(key_words, start_idx):
         if key_words:
@@ -30,8 +31,8 @@ def generate_key_words(ctx, md):
                 return
 
             if len(key) >= len(ctx.cipher):
-                if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
-                yield ctx.key_words + key_words
+                #if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
+                yield ctx_key_words + key_words
                 return
 
         # Try adding one more word to the key
@@ -69,7 +70,7 @@ def generate_words_with_prefix(word_list, prefix):
     for i in range(start_idx, end_idx):
         word = word_list[i]
         if len(word) <= len(prefix):
-            break
+            continue
         if not word.startswith(prefix):
             break
         valid_n_letter_pfx = True
