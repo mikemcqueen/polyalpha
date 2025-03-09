@@ -38,9 +38,9 @@ def generate_key_words(ctx, md):
         # Try adding one more word to the key
         for i in range(start_idx, len(md.words.list)):
             word = md.words.list[i]
+            if len(word) < md.min_keylen: continue
             # Only filter first keyword on key_pfx
             if not key_words and ctx.key_pfx and not word.startswith(ctx.key_pfx):
-                #print(f"filtered {word}")
                 return
             key_words.append(word)
             yield from backtrack(key_words, start_idx)  # Allow repetition of words

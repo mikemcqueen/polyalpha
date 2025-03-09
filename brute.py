@@ -155,6 +155,8 @@ def main():
     #ciphertext = "XZFDQNGQZP"
     #ciphertext = "XZFDQAPSNGQZP"
     args = parse_args()
+    args.key_prefix = None
+    args.plain_prefix = None
     #if (args.key, args.plain) == (None, None):
     #    print("Either --key or --plain must be specified")
     #    return
