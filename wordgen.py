@@ -1,6 +1,7 @@
 from collections import namedtuple
 from codec import decode_with_key
-from util import join
+from util import join, safe_len
+from context import Pkc, Context
 
 Words = namedtuple('Words', ['set', 'list'])
 
@@ -36,8 +37,8 @@ def generate_key_words(ctx, md):
                 return
 
         # Try adding one more word to the key
-        for i in range(start_idx, len(md.words.list)):
-            word = md.words.list[i]
+        for i in range(start_idx, len(md.keywords.list)):
+            word = md.keywords.list[i]
             if len(word) < md.min_keylen: continue
             # Only filter first keyword on key_pfx
             if not key_words and ctx.key_pfx and not word.startswith(ctx.key_pfx):
@@ -49,11 +50,11 @@ def generate_key_words(ctx, md):
     # Start backtracking with empty key
     start_idx = 0
     if ctx.key_pfx:
-        start_idx = get_prefix_start_idx(ctx.key_pfx, md.words.list)
+        start_idx = get_prefix_start_idx(ctx.key_pfx, md.keywords.list)
     yield from backtrack([], start_idx)
 
 
-def generate_words_with_prefix(word_list, prefix):
+def generate_words_with_prefix(word_list, prefix, key_len=0):
     left, right = 0, len(word_list) - 1
     
     while left <= right:
@@ -64,26 +65,31 @@ def generate_words_with_prefix(word_list, prefix):
             right = mid - 1
 
     N = 2
-    prev_n_letter_pfx = None
+    prev_stub = None
     start_idx = left
     end_idx = len(word_list)
+    valid_stub = True
     for i in range(start_idx, end_idx):
         word = word_list[i]
         if len(word) <= len(prefix):
             continue
         if not word.startswith(prefix):
             break
-        valid_n_letter_pfx = True
-        n_letter_pfx = word[:N]
-        if n_letter_pfx != prev_n_letter_pfx:
-            prev_n_letter_pfx = n_letter_pfx
-            if (i + 1 < end_idx) and (word_list[i + 1][:N] == n_letter_pfx):
-                valid_n_letter_pfx = yield n_letter_pfx, True
-        if valid_n_letter_pfx:
+        if key_len < N:
+            stub = word[:N]
+            if stub != prev_stub:
+                prev_stub = stub
+                if (i + 1 < end_idx) and (word_list[i + 1][:N] == stub):
+                    valid_stub = yield stub, True
+                    if valid_stub:
+                        print(f"Found valid word starting with '{stub}'")
+                    else:
+                        print(f"No valid words starting with '{stub}'")
+        if valid_stub:
             yield word, False
-        
 
-def generate_words(input_string, words):
+
+def generate_words(ctx, words):
     """
     Generator function that yields all possible unique valid partitions of the input string,
     where each partition uses ALL letters and satisfies these constraints:
@@ -121,10 +127,11 @@ def generate_words(input_string, words):
     
     # Keep track of already yielded partitions to avoid duplicates
     yielded_partitions = set()
+    last_idx = safe_len(ctx.plain_pfx) + len(ctx.plaintext)
     
     def backtrack(start_idx, current_words):
         # Base case: we've processed the entire input string
-        if start_idx == len(input_string):
+        if start_idx == last_idx:
             # We have a valid partition with only complete words, no prefix
             words_to_yield = list(current_words) if current_words else None
             partition = (tuple(current_words), None)
@@ -135,8 +142,9 @@ def generate_words(input_string, words):
             return
         
         # Try to find full words starting at current position
-        for end_idx in range(start_idx + 1, len(input_string) + 1):
-            current_substring = input_string[start_idx:end_idx]
+        for end_idx in range(start_idx + 1, len(ctx.plaintext) + 1):
+            current_substring = (ctx.plain_pfx or "") if start_idx == 0 else ""
+            current_substring += ctx.plaintext[start_idx:end_idx]
             
             # Check if the current substring is a valid word
             if current_substring in words.set:
@@ -148,7 +156,7 @@ def generate_words(input_string, words):
                 current_words.pop()
         
         # Check if the remaining substring is a valid prefix
-        remaining = input_string[start_idx:]
+        remaining = ctx.plaintext[start_idx:]
         if is_prefix_of_word(remaining):
             # If current_words is empty, yield None instead of an empty list
             words_to_yield = list(current_words) if current_words else None
@@ -158,11 +166,12 @@ def generate_words(input_string, words):
                 yield words_to_yield, remaining
     
     # Single word case (constraint a)
-    if input_string in words.set:
-        partition = (tuple([input_string]), None)
+    whole_word = (ctx.plain_pfx or "") + ctx.plaintext
+    if whole_word in words.set:
+        partition = (tuple([whole_word]), None)
         if partition not in yielded_partitions:
             yielded_partitions.add(partition)
-            yield [input_string], None
+            yield [whole_word], None
     
     # Start backtracking from the beginning of the string with no current words
     yield from backtrack(0, [])
@@ -180,7 +189,8 @@ def can_generate_keyword(ctx, md):
     return not is_empty_generator(keyword_generator(ctx, md))
 
 def contains_words_and_word_prefix(text, words):
-    for _ in generate_words(text, words):
+    ctx = Context(plaintext=text)
+    for _ in generate_words(ctx, words):
         return True
     return False
 
