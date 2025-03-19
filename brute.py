@@ -110,7 +110,7 @@ def find_solutions(ciphertext, wordset, args, found_keys):
         if (args.key_prefix, args.plain_prefix) == (None, None):
             #if decrypted.vigenere[:args.length] in wordset:
             #    add_solution(solutions, key, word, decrypted.vigenere[:len(word)])
-            if decrypted.beaufort[:args.length] in wordset:
+            if args.show_all or decrypted.beaufort[:args.length] in wordset:
                 add_solution(solutions, key, word, decrypted.beaufort[:len(word)])
         else:
             add_any_prefix_solutions(solutions, decrypted, key, word, wordset, args)
@@ -146,8 +146,10 @@ def parse_args():
     parser.add_argument("-c", "--cipher")
     parser.add_argument(      "--uc", nargs="?", const=None, help="--used-cipher")
     parser.add_argument("-l", "--length", type=int, default=0)
+    #parser.add_argument("--el", type=int, default=0) # exact_word_length
     parser.add_argument("-d", "--dict", default="/usr/share/dict/words")
     parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('-a', '--show-all', action='store_true')
     return parser.parse_args()
 
 def main():
@@ -161,7 +163,7 @@ def main():
     #    print("Either --key or --plain must be specified")
     #    return
     if not args.length:
-        print("--length is required")
+        print("--min_word_length is required")
         return
 
     #print(f"ciphertext: {args.cipher}")

@@ -22,23 +22,39 @@ class Op(Enum):
 
 def add_key_words(ctx):
     pos = 0
-    for idx, word in enumerate(ctx.key_words):
-        cipher = ctx.cipher[pos:pos + len(word)]
-        if word not in all_key_words:
-            all_key_words[word] = set()
-        all_key_words[word].add(cipher)
-        pos += len(word)
+    for idx, key in enumerate(ctx.key_words):
+        cipher = ctx.cipher[pos:pos + len(key)]
+        if key not in all_key_words:
+            all_key_words[key] = {}
+        all_key_words[key][cipher] = decode_with_key(cipher, key)
+        pos += len(key)
+
+def add_plain_words(ctx, plain_words, plain_pfx):
+    if plain_words:
+        word = join(plain_words)
+    else:
+        word = plain_pfx
+    if word not in all_plain_words:
+        all_plain_words[word] = set()
+    all_plain_words[word].add(plain_pfx)
 
 def show_all_words():
     print("\nkey\n-----")
-    for word, ciphers in all_key_words.items(): print(f"{word}{' ' * (10 - len(word))}: {ciphers}")
+    keys = list(all_key_words.keys())
+    keys.sort()
+    #for word, ciphers in all_key_words.items(): print(f"{word}{' ' * (10 - len(word))}: {ciphers}")
+    for key in keys: print(f"{key}{' ' * (10 - len(key))}: {all_key_words[key]}")
+
     print("\nplain\n-----")
-    for word, ciphers in all_plain_words.items(): print(f"{word}{' ' * (10 - len(word))}: {ciphers}")
+    words = list(all_plain_words.keys())
+    words.sort()
+    for word in words: print(f"{word}{' ' * (10 - len(word))}: {all_plain_words[word]}")
 
 def plain_word_ctx(plain_word, ctx, md, once=False):
     copy.copy(ctx)
     ctx.plaintext = plain_word
     ctx.plain_words = [plain_word]
+    ctx.plain_pfx = None
     ctx.once = once
     return ctx
 
@@ -131,6 +147,7 @@ def next_plaintext_for_cipher(cipher, fragments, ctx, md):
         level = ctx.level,
         once = ctx.once,
         key_words = ctx.key_words,
+        plain_pfx = ctx.plain_pfx,
         pkc = ctx.pkc,
         cipher = cipher,
         fragments = fragments,
@@ -190,7 +207,8 @@ def next_ciphers_for_plain_word(plain_word, ctx, md):
 """
 
 def final_context(plain_words, key_words, ctx, md):
-    print_ctx(ctx)
+    #print_ctx(ctx)
+    ctx.print()
     hdr = f"{ctx.level} "
     remain_len = aggregate_len(ctx.fragments)
     if remain_len == 0:
@@ -217,8 +235,8 @@ def generate_next(op, ctx, md):
     any_valid = False
     match(op):
         case Op.KEY_WORDS:
-            #if md.verbose: print(f"{' ' * ctx.level} KEY_WORDS:{ctx.level} c: {ctx.cipher}, " \
-            #                     f"p: {ctx.plaintext}, kw: {ctx.key_words}, kp: {ctx.key_pfx}{', Once' if ctx.once else ''}")
+            if md.verbose: print(f"{' ' * ctx.level} KEY_WORDS:{ctx.level} c: {ctx.cipher}, " \
+                                 f"p: {ctx.plaintext}, kw: {ctx.key_words}, kp: {ctx.key_pfx}{', Once' if ctx.once else ''}")
             key_word_generator = keyword_generator(ctx, md)
             try:
                 key_words = next(key_word_generator)
@@ -239,7 +257,7 @@ def generate_next(op, ctx, md):
                 pass
 
         case Op.CIPHERS_FOR_KEY:
-            #if md.verbose: print(f"{' ' * ctx.level} CIPHERS_FOR_KEY:{ctx.level} k: {ctx.key_words}")
+            if md.verbose: print(f"{' ' * ctx.level} CIPHERS_FOR_KEY:{ctx.level} k: {ctx.key_words}")
             any_valid = True
             for cipher, fragments in generate_ciphers_for_key(ctx, md):
                 yield from next_plaintext_for_cipher(cipher, fragments, ctx, md)
@@ -249,14 +267,14 @@ def generate_next(op, ctx, md):
             any_valid = True
             for plain_words, plain_pfx in generate_words(ctx, md.words):
                 add_key_words(ctx)
+                add_plain_words(ctx, plain_words, plain_pfx)
                 if plain_pfx:
                     yield from next_plaintext_for_prefix(plain_words, plain_pfx, ctx, md)
                 else: # next_any_cipher()
                     yield final_context(plain_words, None, ctx, md)
 
         case Op.PLAINTEXT_FOR_PREFIX:
-            #if md.verbose: print(f"{' ' * ctx.level} PLAINTEXT_FOR_PREFIX:{ctx.level} pp: {ctx.plain_pfx}" \
-            #                     f", c: {ctx.cipher}")
+            if md.verbose: print(f"{' ' * ctx.level} PLAINTEXT_FOR_PREFIX:{ctx.level} pp: {ctx.plain_pfx}, c: {ctx.cipher}")
             word_generator = generate_words_with_prefix(md.words.list, ctx.plain_pfx, aggregate_len(ctx.key_words))
             try:
                 plain_word, once = next(word_generator)
@@ -306,15 +324,6 @@ def md_init(args):
     print(f"w: {len(md.words.list)}, kw: {len(md.keywords.list)}")
     return md
 
-def print_ctx(ctx, hdr=None):
-    if hdr: print(hdr)
-    if ctx.plaintext: print(f"p: {ctx.plaintext} ", end="")
-    if ctx.plaintext: print(f"pw: {ctx.plain_words} ", end="")
-    if ctx.plain_pfx: print(f"pp: {ctx.plain_pfx} ", end="")
-    if ctx.key_words: print(f"kw: {ctx.key_words} ", end="")
-    if ctx.key_pfx: print(f"kp: {ctx.key_pfx} ", end="")
-    print(f"c: {ctx.cipher} f: {ctx.fragments}")
-
 def print_pkc(pkc, hdr=None):
     if not pkc.plaintext and not pkc.key and not pkc.cipher: return
     if hdr: print(hdr, end=" ")
@@ -327,7 +336,8 @@ def test_generate_next_key(fragments, md):
         cipher = "xzfdq",
         fragments = fragments
     )
-    print_ctx(ctx, "--")
+    #print_ctx(ctx, "--")
+    ctx.print("--")
     for pkc, hdr in generate_next(Op.KEY_WORDS, ctx, md):
         print_pkc(pkc, hdr)
 
@@ -339,7 +349,8 @@ def test_generate_next_key2(fragments, md):
         plain_pfx = "",
         fragments = fragments
     )
-    print_ctx(ctx, "--")
+    #print_ctx(ctx, "--")
+    ctx.print("--")
     for pkc, hdr in generate_next(Op.KEY_WORDS, ctx, md):
         print_pkc(pkc, hdr)
 
@@ -356,7 +367,8 @@ def test_generate_next_key3(fragments, md):
         plaintext = plaintext,
         fragments = fragments
     )
-    print_ctx(ctx, "--")
+    #print_ctx(ctx, "--")
+    ctx.print("--")
     for pkc, hdr in generate_next(Op.PLAINTEXT_WORDS, ctx, md):
         print_pkc(pkc, hdr)
 
@@ -371,17 +383,18 @@ def run_tests(args):
         fragments += args.af.split(',')
 
     wordlist = [ "balls", "boobs", "bon", "bonfire", "bucket", "fire", "fiber", \
-                 "epic", "snow", "soybean", "soy", "sir", "sire" ]
+                 "fifteen", "epic", "snow", "soybean", "soy", "sir", "sire", "spy", "key" ]
     wordlist.sort()
     wordset = set(wordlist)
     words = Words(set=wordset,list=wordlist)
     md = Metadata(words=words, keywords=words, verbose=args.verbose, min_keylen=args.mk)
+
     test_generate_next_key(fragments, md)
 
     md = md_init(args)
 
     #test_generate_next_key(fragments, md)
-    test_generate_next_key2(fragments, md)
+    #test_generate_next_key2(fragments, md)
     #test_generate_next_key3(fragments, md) # needs work
 
 def filter_fragments(cipher, fragments):
@@ -469,7 +482,7 @@ def get_op(gen_type):
         case "keys":
             return Op.KEY_WORDS
         case "words":
-            return Op.PLAINTEXT_WORD
+            return Op.PLAINTEXT_WORDS
         case _:
             print(f"'{gen_type}' is not an allowed --generate type. Allowed types are: keys,words")
             exit()
@@ -486,10 +499,10 @@ def generate(args):
         plain_pfx = args.pp or "",
         fragments = fragments
     )
-    print_ctx(ctx, "--")
+    #print_ctx(ctx, "--")
+    ctx.print("--")
     for pkc, hdr in generate_next(get_op(args.generate), ctx, md):
         print_pkc(pkc, hdr)
-
 
 def main():
     args = parse_args()

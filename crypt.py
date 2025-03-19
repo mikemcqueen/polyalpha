@@ -34,6 +34,17 @@ def find_key(ciphertext, plaintext):
         beau_key += chr((p + c) % 26 + ord('a'))
     return Decrypted(vigenere=vig_key, beaufort=beau_key)
 
+def find_cipher(key, plain):
+    vig_cipher = ""
+    beau_cipher = ""
+    key_length = len(key)
+    for i in range(len(plain)):
+        p = ord(plain[i]) - ord('a')
+        k = ord(key[i % key_length]) - ord('a')
+        #vig_key += chr((c - p) % 26 + ord('a'))
+        beau_cipher += chr((k - p + 26) % 26 + ord('a'))
+    return Decrypted(vigenere=vig_cipher, beaufort=beau_cipher)
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--key", nargs="?", const=None)
@@ -49,17 +60,16 @@ def main():
         print("Either --key or --plain is required (but not both)")
         exit()
     if None not in (args.key, args.plain):
-        print("Specifying both --key and --plain is not allowed")
-        exit()
-
-    for cipher in args.cipher.split(','):
-        if args.key is not None:
-            decrypted = decrypt(cipher, args.key)
-        else:
-            decrypted = find_key(cipher, args.plain)
+        decrypted = find_cipher(args.key, args.plain)
         print(f"(b): {decrypted.beaufort}")
-
-    #print(f"(v): {decrypted.vigenere}")
+    else:
+        for cipher in args.cipher.split(','):
+            if args.key is not None:
+                decrypted = decrypt(cipher, args.key)
+            else:
+                decrypted = find_key(cipher, args.plain)
+            print(f"(b): {decrypted.beaufort}")
+            #print(f"(v): {decrypted.vigenere}")
 
 if __name__ == "__main__":
     main()

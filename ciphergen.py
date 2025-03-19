@@ -8,9 +8,13 @@ def generate_ciphers_for_key(ctx, md):
         if fragments:
             cipher = ctx.cipher + join(ctx.fragments[i] for i in fragments)
             plain = decode_with_key(cipher[:len(ctx.key)], ctx.key)
+            if ctx.plain_pfx:
+                plain = ctx.plain_pfx + plain
             if not contains_words_and_word_prefix(plain, md.words):
+                if md.verbose: print(f"gen_cfk: Bad p: {plain}, k: {ctx.key}, c: {cipher}")
                 return
-            
+            if md.verbose: print(f"gen_cfk: Good p: {plain}, k: {ctx.key}, c: {cipher}")
+
             if len(cipher) >= len(ctx.key):
                 if (md.verbose): print(f"{' ' * ctx.level} gen_cfk:{ctx.level} p: {plain}, k: {ctx.key}, c: {cipher}")
                 yield cipher, [frag for idx, frag in enumerate(ctx.fragments) if idx not in used_fragments]
@@ -58,25 +62,8 @@ def generate_ciphers_for_plaintext(ctx, md, min_cipher_length: Optional[int] = N
     yield from backtrack([], set())
 
 
+"""
 def generate_ciphers(plaintext, key_pfx, cipher_pfx, wordlist, fragments):
-    """
-    Generate all valid combinations of ciphertext that decode to plaintext.
-    
-    Args:
-        plaintext (str): The target plaintext string
-        key_pfx (str): Known prefix of the correct key
-        cipher_pfx (str): Starting partial ciphertext
-        wordlist (list): Sorted list of words
-        fragments (list): List of ciphertext fragments to combine
-        
-    Yields:
-        str: Valid ciphertext combinations that decode to plaintext
-    """
-    """
-    if len(key_pfx) != len(cipher_pfx):
-        print(f"*** len({key_pfx}) ({len(key_pfx)}) != len({cipher_pfx}) ({len(cipher_pfx)})")
-        #exit()
-    """
     min_length = len(plaintext)
     used_fragments = set()
     
@@ -106,12 +93,11 @@ def generate_ciphers(plaintext, key_pfx, cipher_pfx, wordlist, fragments):
     
     # Start backtracking with the partial ciphertext
     yield from backtrack(cipher_pfx, fragments, [], [])
-
+"""
 
 """
 p epicsno, k: bonfi, c: xzfdq
 c: xzfdqeqvu, c: vu, p gu, frags: ['e', 'qvu'], key: bonfirebo
-"""
 def test_generate_ciphers(fragments, wordlist):
     plain = "epicsno"
     key_pfx = "bonfi"
@@ -120,12 +106,12 @@ def test_generate_ciphers(fragments, wordlist):
     for c, cs, pp, f in generate_ciphers(plain, key_pfx, cipher_pfx, wordlist, fragments):
         key = find_key(c, plain + pp)
         print(f"c: {c}, c: {cs}, p {pp}, frags: {f}, key: {key}")
+"""
 
 
 """
 plain: csno, kp: fi, cp: dq
 c: dqeqvu, c: vu, p ko, frags: ['e', 'qvu'], key: firefi
-"""
 def test_generate_ciphers2(fragments, wordlist):
     plain = "epicsno"
     key_words = ["bon"]
@@ -139,6 +125,7 @@ def test_generate_ciphers2(fragments, wordlist):
     for c, cs, pp, f in generate_ciphers(new_plain, key_pfx, new_cipher, wordlist, fragments):
         key = find_key(c, new_plain + pp)
         print(f"c: {c}, c: {cs}, p {pp}, frags: {f}, key: {key}")
+"""
 
 
 def test_generate_ciphers_for_key(fragments, words, verbose):
@@ -164,7 +151,7 @@ def main():
     args = parse_args()
 
     fragments = ['qvu', 'bma', 'aps', 'e', 'tn', 'nc', 'sc', 'ngqzp']
-    wordlist = [ "balls", "boobs", "bonfire", "bucket", "fire", "fiber", "fandango" ]
+    wordlist = [ "balls", "boobs", "bonfire", "bucket", "fire", "fiber", "fifteen", "fandango" ]
     wordlist.sort()
 
     test_generate_ciphers(fragments, wordlist) #, args.verbose)

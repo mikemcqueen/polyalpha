@@ -20,3 +20,16 @@ class Context(Pkc):
     key_sfx: Optional[str] = None
     pkc: Pkc = field(default_factory=Pkc)
 
+    def __str__(self):
+        str = ""
+        if self.plaintext: str += f"p: {self.plaintext} "
+        if self.plain_words: str += f"pw: {self.plain_words} "
+        if self.plain_pfx: str += f"pp: {self.plain_pfx} "
+        if self.key_words: str += f"kw: {self.key_words} "
+        if self.key_pfx: str += f"kp: {self.key_pfx} "
+        str += f"c: {self.cipher} f: {self.fragments}"
+        return str
+
+    def print(self, hdr=None):
+        if hdr: print(hdr)
+        print(self)

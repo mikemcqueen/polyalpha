@@ -5,8 +5,8 @@ from context import Pkc, Context
 
 Words = namedtuple('Words', ['set', 'list'])
 
-all_plain_words = set()
-all_key_words = set()
+#all_plain_words = set()
+#all_key_words = set()
 
 def get_prefix_start_idx(prefix, wordlist):
     # Find first potential match using binary search
@@ -27,10 +27,12 @@ def generate_key_words(ctx, md):
         if key_words:
             key = existing_key + join(key_words)
             plain = decode_with_key(ctx.cipher[:len(key)], key)
-
+            if ctx.plain_pfx:
+                plain = ctx.plain_pfx + plain
             if not contains_words_and_word_prefix(plain, md.words):
+                if md.verbose: print(f"gen_kw: Bad p: {plain}, k: {key}, c: {ctx.cipher}")
                 return
-
+            if md.verbose: print(f"gen_kw: Good p: {plain}, k: {key}, c: {ctx.cipher}")
             if len(key) >= len(ctx.cipher):
                 #if (ctx.level == 1): print(f" gen_kw p: {plain}, kw: {key_words}")
                 yield ctx_key_words + key_words
@@ -98,10 +100,6 @@ def generate_words(ctx, words):
     c) a sequence of zero or more words in the wordlist, followed by characters that are
        a prefix to a word in the wordlist
     
-    Args:
-        input_string (str): The input string containing a sequence of letters
-        wordlist (list): A list of valid words
-        
     Yields:
         tuple: A tuple of format (complete_words, prefix) where:
               - complete_words is a list of words from the wordlist or None if empty
@@ -195,11 +193,13 @@ def contains_words_and_word_prefix(text, words):
     return False
 
 
+"""
 def show_all_words():
     print("key\n-----")
     print(word for word in all_key_words)
     print("\nplain\n-----")
     print(word for word in all_plain_words)
+"""
 
 """
 --do--
